@@ -1,14 +1,10 @@
 package cloudsky
 
 import (
-	"encoding/json"
-	"fmt"
 	log "github.com/sirupsen/logrus"
 	"net/http"
 	"os"
 )
-
-
 
 func init() {
 	// Log as JSON instead of the default ASCII formatter.
@@ -26,22 +22,22 @@ func init() {
 	log.SetLevel(log.InfoLevel)
 }
 
-// HandlerFunc   defines the request handler used by cloudsky
-type HandlerFunc func(http.ResponseWriter, *http.Request)
+
+// HandlerFunc defines the request handler used by gee
+type HandlerFunc func(*Context)
 
 // Engine implement the interface of ServeHTTP
 type Engine struct {
-	router map[string]HandlerFunc
+	router *router
 }
 
-// New is the constructor of cloudsky.Engine
+// New is the constructor of gee.Engine
 func New() *Engine {
-	return &Engine{router: make(map[string]HandlerFunc)}
+	return &Engine{router: newRouter()}
 }
 
 func (engine *Engine) addRoute(method string, pattern string, handler HandlerFunc) {
-	key := method + "-" + pattern
-	engine.router[key] = handler
+	engine.router.addRoute(method, pattern, handler)
 }
 
 // GET defines the method to add GET request
@@ -54,43 +50,12 @@ func (engine *Engine) POST(pattern string, handler HandlerFunc) {
 	engine.addRoute("POST", pattern, handler)
 }
 
-func (engine *Engine) PUT(pattern string, handler HandlerFunc) {
-	engine.addRoute("PUT", pattern, handler)
-}
-
-func (engine *Engine) DELETE(pattern string, handler HandlerFunc) {
-	engine.addRoute("DELETE", pattern, handler)
-}
-
-func (engine *Engine) JSON(resp http.ResponseWriter, req *http.Request, data map[interface{}]interface{})   {
-	req.Header.Set("content-type", "application/json")
-	JsonStr,err := json.Marshal(data)
-	if err!=nil{
-		log.Error("JSON json.Marshal err! ", err)
-	}
-	
-	_, err = resp.Write(JsonStr)
-	if err != nil {
-		log.Error(err)
-	}
-
-}
-
 // Run defines the method to start a http server
 func (engine *Engine) Run(addr string) (err error) {
-	log.Infof("cloudsky engine serve at %s", addr)
 	return http.ListenAndServe(addr, engine)
 }
 
 func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	key := req.Method + "-" + req.URL.Path
-	if handler, ok := engine.router[key]; ok {
-		handler(w, req)
-	} else {
-		dataLength, err := fmt.Fprintf(w, "404 NOT FOUND: %s\n", req.URL)
-		if err != nil {
-			fmt.Printf("response data length: %d\n",dataLength)
-			return
-		}
-	}
+	c := newContext(w, req)
+	engine.router.handle(c)
 }
